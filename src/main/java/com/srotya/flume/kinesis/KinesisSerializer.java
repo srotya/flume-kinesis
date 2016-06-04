@@ -13,8 +13,39 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package com.srotya.flume.kinesis;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+import org.apache.flume.Event;
+
 /**
  * @author ambudsharma
- *
  */
-package com.srotya.flume.kinesis.sink;
+public interface KinesisSerializer {
+	
+	/**
+	 * Configure  
+	 * 
+	 * @param conf
+	 */
+	public void configure(Map<String, String> conf); 
+	
+	/**
+	 * Serialize event to {@link ByteBuffer}
+	 * 
+	 * @param event
+	 * @return buffer
+	 */
+	public ByteBuffer serialize(Event event);
+	
+	/**
+	 * Deserialize event from {@link ByteBuffer}
+	 * 
+	 * @param buffer
+	 * @return event
+	 */
+	public Event deserialize(ByteBuffer buffer);
+
+}
