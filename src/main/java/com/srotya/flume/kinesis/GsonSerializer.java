@@ -19,6 +19,7 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 
 import org.apache.flume.Event;
+import org.apache.flume.event.SimpleEvent;
 
 import com.google.gson.Gson;
 
@@ -42,7 +43,7 @@ public class GsonSerializer implements KinesisSerializer {
 
 	@Override
 	public Event deserialize(ByteBuffer buffer) {
-		Event event = gson.fromJson(new String(buffer.array()), Event.class);
+		Event event = gson.fromJson(new String(buffer.array()), SimpleEvent.class);
 		return event;
 	}
 

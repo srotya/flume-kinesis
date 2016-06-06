@@ -36,6 +36,7 @@ import com.amazonaws.services.kinesis.model.PutRecordsRequest;
 import com.amazonaws.services.kinesis.model.PutRecordsRequestEntry;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
+import com.srotya.flume.kinesis.Constants;
 import com.srotya.flume.kinesis.GsonSerializer;
 import com.srotya.flume.kinesis.KinesisSerializer;
 
@@ -49,14 +50,7 @@ import com.srotya.flume.kinesis.KinesisSerializer;
  */
 public class KinesisSink extends AbstractSink implements Configurable {
 
-	private static final String SERIALIZER2 = "serializer";
-	private static final String ACCESS_SECRET = "accessSecret";
-	private static final String ACCESS_KEY = "accessKey";
-	private static final String PROXY_HOST = "proxyHost";
-	private static final String PROXY_PORT = "proxyPort";
-	private static final String PROTOCOL = "protocol";
-	private static final String STREAM_NAME = "streamName";
-	private static final String SETTINGS = "settings.";
+	
 	private String partitionKey;
 	private String hashKey;
 	private ClientConfiguration clientConfig;
@@ -65,6 +59,7 @@ public class KinesisSink extends AbstractSink implements Configurable {
 	private String streamName;
 	private KinesisSerializer serializer;
 	private int putSize;
+	private String endpoint;
 
 	@Override
 	public Status process() throws EventDeliveryException {
@@ -80,6 +75,8 @@ public class KinesisSink extends AbstractSink implements Configurable {
 				PutRecordsRequestEntry entry = new PutRecordsRequestEntry();
 				if (partitionKey != null) {
 					entry.setPartitionKey(event.getHeaders().get(partitionKey));
+				}else {
+					entry.setPartitionKey(String.format("partitionKey-%d", i));
 				}
 				if (hashKey != null) {
 					entry.setExplicitHashKey(event.getHeaders().get(hashKey));
@@ -108,33 +105,35 @@ public class KinesisSink extends AbstractSink implements Configurable {
 	@Override
 	public synchronized void start() {
 		client = new AmazonKinesisClient(awsCredentials, clientConfig);
+		client.setEndpoint(endpoint);
 		super.start();
 	}
 
 	@Override
 	public void configure(Context ctx) {
-		ImmutableMap<String, String> props = ctx.getSubProperties(SETTINGS);
-		if (!props.containsKey(ACCESS_KEY) || !props.containsKey(ACCESS_SECRET)) {
+		ImmutableMap<String, String> props = ctx.getSubProperties(Constants.SETTINGS);
+		if (!props.containsKey(Constants.ACCESS_KEY) || !props.containsKey(Constants.ACCESS_SECRET)) {
 			Throwables.propagate(
 					new InvalidArgumentException("Must provide AWS credentials i.e. accessKey and accessSecret"));
 		}
-		awsCredentials = new BasicAWSCredentials(props.get(ACCESS_KEY), props.get(ACCESS_SECRET));
+		awsCredentials = new BasicAWSCredentials(props.get(Constants.ACCESS_KEY), props.get(Constants.ACCESS_SECRET));
 		clientConfig = new ClientConfiguration();
-		if (props.containsKey(PROXY_HOST)) {
-			clientConfig.setProxyHost(props.get(PROXY_HOST));
-			clientConfig.setProxyPort(Integer.parseInt(props.getOrDefault(PROXY_PORT, "80")));
-			clientConfig.setProtocol(Protocol.valueOf(props.getOrDefault(PROTOCOL, "HTTPS")));
+		if (props.containsKey(Constants.PROXY_HOST)) {
+			clientConfig.setProxyHost(props.get(Constants.PROXY_HOST));
+			clientConfig.setProxyPort(Integer.parseInt(props.getOrDefault(Constants.PROXY_PORT, "80")));
+			clientConfig.setProtocol(Protocol.valueOf(props.getOrDefault(Constants.PROTOCOL, "HTTPS")));
 		}
-		if (!props.containsKey(STREAM_NAME)) {
+		if (!props.containsKey(Constants.STREAM_NAME)) {
 			Throwables.propagate(new InvalidArgumentException("Must provide Kinesis stream name"));
 		}
-		streamName = props.get(STREAM_NAME);
-		putSize = Integer.parseInt(props.getOrDefault("putSize", "100"));
+		streamName = props.get(Constants.STREAM_NAME);
+		putSize = Integer.parseInt(props.getOrDefault(Constants.PUT_SIZE, "100"));
 		if(putSize>500) {
 			Throwables.propagate(
 					new InvalidArgumentException("AWS Kinesis doesn't allow more than 500 put requests"));
 		}
-		String serializerClass = props.getOrDefault(SERIALIZER2, GsonSerializer.class.getName());
+		endpoint = props.getOrDefault(Constants.ENDPOINT, Constants.DEFAULT_ENDPOINT);
+		String serializerClass = props.getOrDefault(Constants.SERIALIZER, GsonSerializer.class.getName());
 		try {
 			serializer = (KinesisSerializer) Class.forName(serializerClass).newInstance();
 		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
@@ -143,6 +142,11 @@ public class KinesisSink extends AbstractSink implements Configurable {
 		serializer.configure(props);
 	}
 
+	@Override
+	public synchronized void stop() {
+		client.shutdown();
+	}
+	
 	/**
 	 * @return the partitionKey
 	 */
